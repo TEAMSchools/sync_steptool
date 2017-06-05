@@ -1,1 +1,1 @@
-# sync_steptool
+README for gitProj
