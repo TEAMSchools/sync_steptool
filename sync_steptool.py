@@ -2,15 +2,16 @@
 
 from steptool_config import CONFIG
 import os
-from selenium import webdriver
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 import requests
 import re
 from io import StringIO
 import pandas as pd
 from gcloud import storage
+from selenium import webdriver
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
 
 STEP_USERNAME = CONFIG['step_username']
 STEP_PASSWORD = CONFIG['step_password']
@@ -40,10 +41,9 @@ def upload_to_gcs(save_dir, filename, credentials=GCLOUD_CREDENTIALS, project_na
 
 def main():
     """
-    for some reason in PythonAnywhere, every find_element call gives a permission error on the first try
-    so everything is wrapped in a try/except block
+    selenium on PythonAnywhere is a bugged older version
+    so every `find_element` call is wrapped in a try/except block
     """
-    # with Display():
     print('Starting webdriver...')
     driver = webdriver.Firefox()
 
