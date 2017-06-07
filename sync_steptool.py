@@ -13,6 +13,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+## global variables
 STEP_USERNAME = CONFIG['step_username']
 STEP_PASSWORD = CONFIG['step_password']
 DISTRICT_NAME_FULL = CONFIG['district_name_full']
@@ -21,25 +22,7 @@ GCLOUD_CREDENTIALS = CONFIG['gcloud_credentials']
 GCLOUD_PROJECT_NAME = CONFIG['gcloud_project_name']
 GCS_BUCKET_NAME = CONFIG['gcs_bucket_name']
 
-def upload_to_gcs(save_dir, filename, credentials=GCLOUD_CREDENTIALS, project_name=GCLOUD_PROJECT_NAME, bucket_name=GCS_BUCKET_NAME):
-    """
-    upload file to a Google Cloud Storage blob
-        - filepath
-        - credentials
-        - project
-        - bucket_name
-    """
-    gcs_client = storage.Client(project_name, credentials)
-    gcs_bucket = gcs_client.get_bucket(bucket_name)
-
-    gcs_path = 'steptool/{}'.format(filename)
-    gcs_blob = gcs_bucket.blob(gcs_path)
-    print('\tUploading to Google Cloud Storage... {}'.format(gcs_blob))
-
-    filepath = '{0}/{1}'.format(save_dir, filename)
-    gcs_blob.upload_from_filename(filepath)
-
-def main():
+def scrape_steptool():
     """
     selenium on PythonAnywhere is a bugged older version
     so every `find_element` call is wrapped in a try/except block
@@ -93,13 +76,11 @@ def main():
             finally:
                 element.click()
 
-            ## navigate to report download page
+            ## navigate to report download page and export cookies to pass to requests session
             print('Exporting session data...')
             WebDriverWait(driver, 10).until(
                 EC.title_is('Export Step Level Assessment Data')
             )
-
-            ## export cookies from Selenium to pass along to requests session
             current_url = driver.current_url
             export_url = current_url.replace('step_level.html','step_all.csv')
             all_cookies = driver.get_cookies()
@@ -108,7 +89,32 @@ def main():
             driver.quit()
             print('Quitting webdriver...')
 
-    print('Exporting cookies...')
+    return all_cookies, export_url
+
+def upload_to_gcs(save_dir, filename, credentials=GCLOUD_CREDENTIALS, project_name=GCLOUD_PROJECT_NAME, bucket_name=GCS_BUCKET_NAME):
+    """
+    upload file to a Google Cloud Storage blob
+        - filepath
+        - credentials
+        - project
+        - bucket_name
+    """
+    gcs_client = storage.Client(project_name, credentials)
+    gcs_bucket = gcs_client.get_bucket(bucket_name)
+
+    gcs_path = 'steptool/{}'.format(filename)
+    gcs_blob = gcs_bucket.blob(gcs_path)
+    print('\tUploading to Google Cloud Storage... {}'.format(gcs_blob))
+
+    filepath = '{0}/{1}'.format(save_dir, filename)
+    gcs_blob.upload_from_filename(filepath)
+
+def main():
+    if not os.path.isdir(SAVE_PATH):
+        os.mkdir(SAVE_PATH)
+
+    ## scrape data from STEP Tool website
+    all_cookies, export_url = scrape_steptool()
     session_cookies = {}
     for s_cookie in all_cookies:
         session_cookies[s_cookie['name']] = s_cookie['value']
@@ -134,7 +140,4 @@ def main():
     upload_to_gcs(SAVE_PATH, filename)
 
 if __name__ == '__main__':
-    if not os.path.isdir(SAVE_PATH):
-        os.mkdir(SAVE_PATH)
-
     main()
