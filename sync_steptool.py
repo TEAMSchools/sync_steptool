@@ -1,27 +1,23 @@
 #!/bin/usr/python3.6
 
 from steptool_config import CONFIG
-from datarobot_helpers import email
-import os
-import requests
-import re
-from io import StringIO
-import pandas as pd
-from gcloud import storage
+from datarobot_helpers import email, gcs
 from pyvirtualdisplay import Display
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+import requests
+import re
+from io import StringIO
+import pandas as pd
+import os
 
 ## global variables
 STEP_USERNAME = CONFIG['step_username']
 STEP_PASSWORD = CONFIG['step_password']
 DISTRICT_NAME_FULL = CONFIG['district_name_full']
 SAVE_PATH = CONFIG['save_path']
-GCLOUD_CREDENTIALS = CONFIG['gcloud_credentials']
-GCLOUD_PROJECT_NAME = CONFIG['gcloud_project_name']
-GCS_BUCKET_NAME = CONFIG['gcs_bucket_name']
 
 def scrape_steptool():
     """
@@ -92,24 +88,6 @@ def scrape_steptool():
 
     return all_cookies, export_url
 
-def upload_to_gcs(save_dir, filename, credentials=GCLOUD_CREDENTIALS, project_name=GCLOUD_PROJECT_NAME, bucket_name=GCS_BUCKET_NAME):
-    """
-    upload file to a Google Cloud Storage blob
-        - filepath
-        - credentials
-        - project
-        - bucket_name
-    """
-    gcs_client = storage.Client(project_name, credentials)
-    gcs_bucket = gcs_client.get_bucket(bucket_name)
-
-    gcs_path = 'steptool/{}'.format(filename)
-    gcs_blob = gcs_bucket.blob(gcs_path)
-    print('\tUploading to Google Cloud Storage... {}'.format(gcs_blob))
-
-    filepath = '{0}/{1}'.format(save_dir, filename)
-    gcs_blob.upload_from_filename(filepath)
-
 def main():
     if not os.path.isdir(SAVE_PATH):
         os.mkdir(SAVE_PATH)
@@ -125,20 +103,22 @@ def main():
     with requests.Session() as s:
         r = s.get(export_url, cookies=session_cookies)
 
-    ## parse save file variables
+    ## parse data and variables from response
+    data = StringIO(r.text)
+
     r_contentdisposition = r.headers['Content-Disposition']
     pattern = 'attachment; filename=(all_steps_\d{4}-\d{4}.csv)'
     m = re.search(pattern, r_contentdisposition)
     filename = m.group(1)
-    savepath = '{0}/{1}'.format(SAVE_PATH, filename)
+
+    filepath = '{0}/{1}'.format(SAVE_PATH, filename)
 
     ## read the csv into a pandas dataframe and save
-    data = StringIO(r.text)
     df = pd.read_csv(data, low_memory=False)
-    df.to_csv(savepath, index=False)
+    df.to_csv(filepath, index=False)
 
     ## push to GCS
-    upload_to_gcs(SAVE_PATH, filename)
+    gcs.upload_to_gcs('steptool', 'all_steps', SAVE_PATH, filename)
 
 if __name__ == '__main__':
     try:
