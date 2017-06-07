@@ -1,6 +1,7 @@
 #!/bin/usr/python3.6
 
 from steptool_config import CONFIG
+from datarobot_helpers import email
 import os
 import requests
 import re
@@ -140,4 +141,7 @@ def main():
     upload_to_gcs(SAVE_PATH, filename)
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception as e:
+        email.send_email('STEP Tool sync error', e)
