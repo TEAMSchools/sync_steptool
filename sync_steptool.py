@@ -2,16 +2,19 @@
 
 from steptool_config import CONFIG
 from datarobot_helpers import email, gcs
+
 from pyvirtualdisplay import Display
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import requests
+
+import os
 import re
 from io import StringIO
+import requests
 import pandas as pd
-import os
+from retrying import retry
 
 ## global variables
 STEP_USERNAME = CONFIG['step_username']
@@ -33,84 +36,84 @@ def scrape_steptool():
 
             ## login
             print('Logging in...')
+            ## enter username
             try:
                 element = driver.find_element_by_id('id_username')
             except:
                 element = driver.find_element_by_id('id_username')
             finally:
                 element.send_keys(STEP_USERNAME)
-
+            ## enter password
             try:
                 element = driver.find_element_by_id('id_password')
             except:
                 element = driver.find_element_by_id('id_password')
             finally:
                 element.send_keys(STEP_PASSWORD)
-
+            ## submit login form
             element.send_keys(Keys.ENTER)
+            WebDriverWait(driver, 15).until(
+                EC.title_is('STEP: My Home Page')
+            )
 
             ## navigate to Data Exports
             print('Navigating to Data Exports...')
-            WebDriverWait(driver, 10).until(
-                EC.title_is('STEP: My Home Page')
-            )
             try:
                 element = driver.find_element_by_link_text('Data Exports')
             except:
                 element = driver.find_element_by_link_text('Data Exports')
             finally:
                 element.click()
-
-            ## navigate to export page
-            print('Navigating to STEP Level Assessment export...')
-            WebDriverWait(driver, 10).until(
-                EC.title_is('{} Schools Exports'.format(DISTRICT_NAME_FULL))
+            WebDriverWait(driver, 15).until(
+                EC.title_is('Export Student Achievement Data')
             )
-            try:
-                element = driver.find_element_by_link_text('STEP Level Assessment Data')
-            except:
-                element = driver.find_element_by_link_text('STEP Level Assessment Data')
-            finally:
-                element.click()
 
-            ## navigate to report download page and export cookies to pass to requests session
-            print('Exporting session data...')
-            WebDriverWait(driver, 10).until(
-                EC.title_is('Export Step Level Assessment Data')
-            )
+            ## replace session URL with export path
             current_url = driver.current_url
-            export_url = current_url.replace('step_level.html','step_all.csv')
+            export_url = current_url.replace('achievement.html','py/step_all.csv')
             all_cookies = driver.get_cookies()
 
-        finally:
-            driver.quit()
             print('Quitting webdriver...')
+            driver.quit()
+
+        except Exception as e:
+            print(e)
+            raise e
 
     return all_cookies, export_url
+
+@retry(wait_exponential_multiplier=1000, wait_exponential_max=64000, stop_max_attempt_number=10)
+def get_export_file(url, cookies):
+    print('Downloading...')
+    with requests.Session() as s:
+        r = s.get(url, cookies=cookies)
+
+    ## parse data and variables from response
+    data = StringIO(r.text)
+    pattern = 'attachment; filename=(all_steps_\d{4}-\d{4}.csv)'
+    m = re.search(pattern, r.headers['Content-Disposition'])
+    filename = m.group(1)
+
+    return data, filename
 
 def main():
     if not os.path.isdir(SAVE_PATH):
         os.mkdir(SAVE_PATH)
 
     ## scrape data from STEP Tool website
-    all_cookies, export_url = scrape_steptool()
+    try:
+        all_cookies, export_url = scrape_steptool()
+    except Exception as e:
+        raise e
+
+    ## extract cookies for session
+    print('Extracting cookies...')
     session_cookies = {}
     for s_cookie in all_cookies:
         session_cookies[s_cookie['name']] = s_cookie['value']
 
     ## switch over to requests to export the data files
-    print('Downloading...')
-    with requests.Session() as s:
-        r = s.get(export_url, cookies=session_cookies)
-
-    ## parse data and variables from response
-    data = StringIO(r.text)
-
-    r_contentdisposition = r.headers['Content-Disposition']
-    pattern = 'attachment; filename=(all_steps_\d{4}-\d{4}.csv)'
-    m = re.search(pattern, r_contentdisposition)
-    filename = m.group(1)
-
+    data, filename = get_export_file(export_url, session_cookies)
     filepath = '{0}/{1}'.format(SAVE_PATH, filename)
 
     ## read the csv into a pandas dataframe and save
