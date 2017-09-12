@@ -22,6 +22,7 @@ STEP_PASSWORD = CONFIG['step_password']
 DISTRICT_NAME_FULL = CONFIG['district_name_full']
 SAVE_PATH = CONFIG['save_path']
 
+@retry(wait_exponential_multiplier=1000, wait_exponential_max=64000, stop_max_attempt_number=10)
 def scrape_steptool():
     """
     selenium on PythonAnywhere is a bugged older version
