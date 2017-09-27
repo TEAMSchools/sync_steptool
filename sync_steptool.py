@@ -1,20 +1,17 @@
 #!/bin/usr/python3.6
-
 from steptool_config import CONFIG
 from datarobot_helpers import email, gcs
-
 from pyvirtualdisplay import Display
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-
+from io import StringIO
+from retrying import retry
 import os
 import re
-from io import StringIO
 import requests
 import pandas as pd
-from retrying import retry
 
 ## global variables
 STEP_USERNAME = CONFIG['step_username']
